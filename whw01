@@ -1,0 +1,358 @@
+#!/bin/sh
+
+
+#File Paths
+NETWORK_CONF="/etc/config/network"
+WIRELESS_CONF="/etc/config/wireless"
+DHCP_CONF="/etc/config/dhcp"
+FIREWALL_CONF="/etc/config/firewall"
+SYST_CONF="/etc/config/system"
+SYSCTL_CONF="/etc/sysctl.conf"
+TS_HOSTS="/usr/sbin/tshosts"
+TS_FILE="/etc/tshosts"
+UP_CHECK="/usr/sbin/upcheck"
+CRON="/etc/crontabs/root"
+
+#Editable Variables
+HOST_NAME="whd"
+TZ="IST-4:00"
+TZN="Asia/Dubai"
+HOME_SSID="Home"
+HOME_PSSWD="X9dV7FqC1s"
+HUB_SSID="Things"
+HUB_PSSWD="hQ39bR5xw2"
+GUEST_SSID="Guest"
+GUEST_PSSWD="qwertyui5678"
+PLATFORM_2G="platform/soc/a000000.wifi"
+PLATFORM_5G="platform/soc/a800000.wifi"
+
+AUTH_KEY="tskey-auth-kDjZHFP9D311CNTRL-ezK96ZDFHodNx9g36kroodsaizcjqoUR4"
+
+echo "" > $NETWORK_CONF
+echo "" > $WIRELESS_CONF
+echo "" > $DHCP_CONF
+echo "" > $FIREWALL_CONF
+echo "" > $SYST_CONF
+echo "" > $SYSCTL_CONF
+
+#Contents
+cat > "$NETWORK_CONF" << 'EOF'
+config interface 'loopback'
+        option device 'lo'
+        option proto 'static'
+        list ipaddr '127.0.0.1/8'
+config globals 'globals'
+        option ula_prefix 'fd62:5338:cf94::/48'
+config device
+        option name 'br-home'
+        option type 'bridge'
+config interface 'home'
+        option device 'br-home'
+        option proto 'static'
+        list ipaddr '192.168.1.1/24'
+        option ip6assign '60'
+config device
+        option name 'br-hub'
+        option type 'bridge'
+        list ports 'eth2'
+config interface 'hub'
+        option device 'br-hub'
+        option proto 'static'
+        list ipaddr '192.168.20.1/24'
+config interface 'guest'
+        option proto 'static'
+        list ipaddr '192.168.100.1/24'
+config interface 'wan'
+        option device 'eth1'
+        option proto 'dhcp'
+config interface 'wan6'
+        option device 'eth1'
+        option proto 'dhcpv6'
+
+EOF
+
+cat > "$WIRELESS_CONF" << EOF
+config wifi-device 'radio0'
+        option type 'mac80211'
+        option path '$PLATFORM_2G'
+        option channel '1'
+        option band '2g'
+        option htmode 'VHT40'
+        option disabled '0'
+        option cell_density '0'
+config wifi-iface 'home_radio0'
+        option device 'radio0'
+        option network 'home'
+        option mode 'ap'
+        option ssid '$HOME_SSID'
+        option encryption 'psk2'
+        option key '$HOME_PSSWD'
+        option ieee80211r '1'
+config wifi-iface 'hub_radio0'
+        option device 'radio0'
+        option network 'hub'
+        option mode 'ap'
+        option ssid '$HUB_SSID'
+        option encryption 'psk2'
+        option key '$HUB_PSSWD'
+        option hidden '1'
+config wifi-iface 'guest_radio0'
+        option device 'radio0'
+        option network 'guest'
+        option mode 'ap'
+        option ssid '$GUEST_SSID'
+        option encryption 'psk2'
+        option key '$GUEST_PSSWD'
+        option isolate '1'
+        option ieee80211r '1'
+config wifi-device 'radio1'
+        option type 'mac80211'
+        option path '$PLATFORM_5G'
+        option channel '36'
+        option band '5g'
+        option htmode 'VHT80'
+        option disabled '0'
+        option cell_density '0'
+config wifi-iface 'home_radio1'
+        option device 'radio1'
+        option network 'home'
+        option mode 'ap'
+        option ssid '$HOME_SSID'
+        option encryption 'psk2'
+        option key '$HOME_PSSWD'
+        option ieee80211r '1'
+config wifi-iface 'hub_radio1'
+        option device 'radio1'
+        option network 'hub'
+        option mode 'ap'
+        option ssid '$HUB_SSID'
+        option encryption 'psk2'
+        option key '$HUB_PSSWD'
+        option hidden '1'
+EOF
+
+cat > "$DHCP_CONF" << EOF
+config dnsmasq
+        option domainneeded '1'
+        option localise_queries '1'
+        option rebind_protection '1'
+        option rebind_localhost '1'
+        option local '/home/'
+        option domain 'home'
+        option expandhosts '1'
+        option authoritative '1'
+        option readethers '1'
+        option leasefile '/tmp/dhcp.leases'
+        option resolvfile '/tmp/resolv.conf.d/resolv.conf.auto'
+        option localservice '0'
+        list addnhosts '$TS_FILE'
+config dhcp 'home'
+        option interface 'home'
+        option start '2'
+        option limit '50'
+        option leasetime '120h'
+config dhcp 'hub'
+        option interface 'hub'
+        option start '2'
+        option limit '100'
+        option leasetime '120h'
+config dhcp 'guest'
+        option interface 'guest'
+        option start '101'
+        option limit '50'
+        option leasetime '2h'
+EOF
+
+
+cat > "$FIREWALL_CONF" << 'EOF'
+config defaults
+        option input 'REJECT'
+        option output 'ACCEPT'
+        option forward 'REJECT'
+        option synflood_protect '1'
+config zone
+        option name 'home'
+        list network 'home'
+        option input 'ACCEPT'
+        option output 'ACCEPT'
+        option forward 'ACCEPT'
+config zone
+        option name 'wan'
+        list network 'wan'
+        list network 'wan6'
+        option input 'REJECT'
+        option output 'ACCEPT'
+        option forward 'REJECT'
+        option masq '1'
+        option mtu_fix '1'
+config forwarding
+        option src 'home'
+        option dest 'wan'
+config zone
+        option name 'guest'
+        list network 'guest'
+        option input 'REJECT'
+        option output 'ACCEPT'
+        option forward 'REJECT'
+config forwarding
+        option src 'guest'
+        option dest 'wan'
+config zone
+        option name 'hub'
+        list network 'hub'
+        option input 'REJECT'
+        option output 'ACCEPT'
+        option forward 'REJECT'
+config forwarding
+        option src 'hub'
+        option dest 'wan'
+config forwarding
+        option src 'home'
+        option dest 'hub'
+config forwarding
+        option src 'hub'
+        option dest 'home'
+config zone
+        option name 'tailscale'
+        option input 'ACCEPT'
+        option output 'ACCEPT'
+        option forward 'ACCEPT'
+        option masq '1'
+        list device 'tailscale0'
+config forwarding
+        option src 'home'
+        option dest 'tailscale'
+config forwarding
+        option src 'hub'
+        option dest 'tailscale'
+config forwarding
+        option src 'tailscale'
+        option dest 'home'
+config forwarding
+        option src 'tailscale'
+        option dest 'wan'
+config rule
+        option name 'Allow-DNS-Guest'
+        option src 'guest'
+        option dest_port '53'
+        option proto 'tcp udp'
+        option target 'ACCEPT'
+config rule
+        option name 'Allow-DHCP-Guest'
+        option src 'guest'
+        option dest_port '67'
+        option proto 'udp'
+        option target 'ACCEPT'
+config rule
+        option name 'Allow-DNS-Hub'
+        option src 'hub'
+        option dest_port '53'
+        option proto 'tcp udp'
+        option target 'ACCEPT'
+config rule
+        option name 'Allow-DHCP-Hub'
+        option src 'hub'
+        option dest_port '67'
+        option proto 'udp'
+        option target 'ACCEPT'
+EOF
+
+cat > "$SYST_CONF" << EOF
+config system
+        option hostname '$HOST_NAME'
+        option timezone '$TZ'
+        option zonename '$TZN'
+        option ttylogin '0'
+        option log_size '64'
+        option urandom_seed '0'
+        option log_proto 'udp'
+        option conloglevel '8'
+        option cronloglevel '5'
+        option compat_version '1.1'
+config timeserver 'ntp'
+        option enabled '1'
+        option enable_server '1'
+        option interface 'hub'
+        list server '0.openwrt.pool.ntp.org'
+        list server '1.openwrt.pool.ntp.org'
+        list server '2.openwrt.pool.ntp.org'
+        list server '3.openwrt.pool.ntp.org'
+EOF
+
+
+cat > "$SYSCTL_CONF" << 'EOF'
+net.ipv4.ip_forward = 1
+net.ipv6.conf.all.forwarding = 1
+EOF
+
+cat > "$TS_HOSTS" << EOF
+#!/bin/sh
+OUT=$TS_FILE
+EOF
+cat >> "$TS_HOSTS" << 'EOF'
+mkdir -p "$(dirname "$OUT")"
+: > "$OUT"
+process_peers() {
+    tailscale status --json |
+    jq -r '.Peer[]? | "\(.DNSName) \(.TailscaleIPs[]?)"' |
+    while read dns ip; do
+        case "$ip" in *:*) continue ;; esac
+        dns=${dns%.}
+        short=${dns%%.*}
+        echo "$ip $short $dns" >> "$OUT"
+    done
+}
+process_self() {
+    tailscale status --json |
+    jq -r '.Self | "\(.DNSName) \(.TailscaleIPs[]?)"' |
+    while read dns ip; do
+        case "$ip" in *:*) continue ;; esac
+        dns=${dns%.}
+        short=${dns%%.*}
+        echo "$ip $short $dns" >> "$OUT"
+    done
+}
+process_peers
+process_self
+EOF
+
+cat > "$UP_CHECK" << "EOF"
+#!/bin/sh
+NOW=$(date "+%F %H:%M")
+
+UPTIME_SEC=$(cut -d. -f1 /proc/uptime)
+
+DAYS=$(( UPTIME_SEC / 86400 ))
+HOURS=$(( (UPTIME_SEC % 86400) / 3600 ))
+MINS=$(( (UPTIME_SEC % 3600) / 60 ))
+
+if [ "$DAYS" -gt 0 ]; then
+  UPTIME_STR="${DAYS}d ${HOURS}h ${MINS}m"
+elif [ "$HOURS" -gt 0 ]; then
+  UPTIME_STR="${HOURS}h ${MINS}m"
+else
+  UPTIME_STR="${MINS}m"
+fi
+
+echo "$NOW | Uptime: $UPTIME_STR" >> /root/uptime.log
+EOF
+
+chmod +x "$TS_HOSTS"
+chmod +x "$UP_CHECK"
+
+cat > "$CRON" << EOF
+0 0 * * * $TS_HOSTS
+0 * * * * $UP_CHECK
+EOF
+
+echo "Configuration files updated."
+
+/etc/init.d/system reload
+apk update
+apk add tailscale nano jq
+
+tailscale up --ssh --force-reauth --auth-key="$AUTH_KEY" --advertise-exit-node --advertise-routes=192.168.1.0/24,192.168.20.0/24 --hostname="$HOST_NAME"
+
+ash "$TS_HOSTS"
+
+echo "Setup Completed"

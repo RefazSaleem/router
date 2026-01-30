@@ -1,0 +1,343 @@
+#!/bin/sh
+
+# File Paths
+NETWORK_CONF="/etc/config/network"
+WIRELESS_CONF="/etc/config/wireless"
+DHCP_CONF="/etc/config/dhcp"
+FIREWALL_CONF="/etc/config/firewall"
+SYST_CONF="/etc/config/system"
+SYSCTL_CONF="/etc/sysctl.conf"
+TS_HOSTS="/usr/sbin/tshosts"
+TS_FILE="/etc/tshosts"
+UP_CHECK="/usr/sbin/upcheck"
+CRON="/etc/crontabs/root"
+
+# Editable Variables
+HOST_NAME="axt"
+TZ="IST-5:30"
+TZN="Asia/Kolkata"
+HOME_SSID="Home"
+HOME_PSSWD="X9dV7FqC1s"
+HUB_SSID="Things"
+HUB_PSSWD="hQ39bR5xw2"
+GUEST_SSID="Guest"
+GUEST_PSSWD="qwertyui5678"
+PLATFORM_2G="platform/18000000.wifi"
+PLATFORM_5G="platform/18000000.wifi+1"
+
+# Secret Keys
+AUTH_KEY="tskey-auth-kDjZHFP9D311CNTRL-ezK96ZDFHodNx9g36kroodsaizcjqoUR4"
+
+# NETWORK
+cat > "$NETWORK_CONF" << 'EOF'
+config interface 'loopback'
+        option device 'lo'
+        option proto 'static'
+        option ipaddr '127.0.0.1'
+        option netmask '255.0.0.0'
+
+config globals 'globals'
+        option ula_prefix 'fd62:5338:cf94::/48'
+
+config device
+        option name 'lan.br'
+        option type 'bridge'
+        list ports 'lan1'
+        list ports 'lan2'
+        list ports 'lan3'
+
+config device
+        option name 'lan.br.1'
+        option type 'bridge'
+        list ports 'lan1:t'
+
+config interface 'home'
+        option device 'lan.br.1'
+        option proto 'static'
+        option ipaddr '192.168.1.1'
+        option netmask '255.255.255.0'
+        option ip6assign '60'
+
+config device
+        option name 'lan.br.2'
+        option type 'bridge'
+
+config interface 'guest'
+        option device 'lan.br.2'
+        option proto 'static'
+        option ipaddr '192.168.100.1'
+        option netmask '255.255.255.0'
+
+config device
+        option name 'lan.br.3'
+        option type 'bridge'
+        list ports 'lan2:t'
+        list ports 'lan3:t'
+
+config interface 'hub'
+        option device 'lan.br.3'
+        option proto 'static'
+        option ipaddr '192.168.20.1'
+        option netmask '255.255.255.0'
+
+config interface 'wan'
+        option device 'wan'
+        option proto 'dhcp'
+EOF
+
+# WIRELESS
+cat > "$WIRELESS_CONF" << EOF
+config wifi-device 'radio0'
+        option type 'mac80211'
+        option path '$PLATFORM_2G'
+        option channel '1'
+        option band '2g'
+        option htmode 'HE20'
+        option cell_density '0'
+        option disabled '0'
+
+config wifi-iface 'home_radio0'
+        option device 'radio0'
+        option network 'home'
+        option mode 'ap'
+        option ssid '$HOME_SSID'
+        option encryption 'psk2'
+        option key '$HOME_PSSWD'
+        option ieee80211r '1'
+        option ft_over_ds '0'
+        option ft_psk_generate_local '1'
+
+config wifi-iface 'hub_radio0'
+        option device 'radio0'
+        option network 'hub'
+        option mode 'ap'
+        option ssid '$HUB_SSID'
+        option encryption 'psk2'
+        option key '$HUB_PSSWD'
+        option hidden '1'
+
+config wifi-iface 'guest_radio0'
+        option device 'radio0'
+        option network 'guest'
+        option mode 'ap'
+        option ssid '$GUEST_SSID'
+        option encryption 'psk2'
+        option key '$GUEST_PSSWD'
+        option isolate '1'
+        option ieee80211r '1'
+        option ft_over_ds '0'
+        option ft_psk_generate_local '1'
+
+config wifi-device 'radio1'
+        option type 'mac80211'
+        option path '$PLATFORM_5G'
+        option channel '36'
+        option band '5g'
+        option htmode 'HE80'
+        option disabled '0'
+        option cell_density '0'
+
+config wifi-iface 'home_radio1'
+        option device 'radio1'
+        option network 'home'
+        option mode 'ap'
+        option ssid '$HOME_SSID'
+        option encryption 'psk2'
+        option key '$HOME_PSSWD'
+        option ieee80211r '1'
+        option ft_over_ds '0'
+        option ft_psk_generate_local '1'
+
+config wifi-iface 'hub_radio1'
+        option device 'radio1'
+        option network 'hub'
+        option mode 'ap'
+        option ssid '$HUB_SSID'
+        option encryption 'psk2'
+        option key '$HUB_PSSWD'
+        option hidden '1'
+EOF
+
+# DHCP
+cat > "$DHCP_CONF" << EOF
+config dnsmasq
+        option domainneeded '1'
+        option localise_queries '1'
+        option rebind_protection '1'
+        option rebind_localhost '1'
+        option local '/home/'
+        option domain 'lan'
+        option expandhosts '1'
+        option authoritative '1'
+        option readethers '1'
+        option leasefile '/tmp/dhcp.leases'
+        option resolvfile '/tmp/resolv.conf.d/resolv.conf.auto'
+        option localservice '0'
+        list addnhosts '$TS_FILE'
+
+config dhcp 'home'
+        option interface 'home'
+        option start '2'
+        option limit '50'
+        option leasetime '120h'
+
+config dhcp 'hub'
+        option interface 'hub'
+        option start '2'
+        option limit '100'
+        option leasetime '120h'
+
+config dhcp 'guest'
+        option interface 'guest'
+        option start '101'
+        option limit '50'
+        option leasetime '2h'
+EOF
+
+
+# FIREWALL
+cat > "$FIREWALL_CONF" << 'EOF'
+config defaults
+        option input 'REJECT'
+        option output 'ACCEPT'
+        option forward 'REJECT'
+        option synflood_protect '1'
+
+config zone
+        option name 'home'
+        option input 'ACCEPT'
+        option output 'ACCEPT'
+        option forward 'ACCEPT'
+        list network 'home'
+        option masq '1'
+
+config zone
+        option name 'wan'
+        option input 'REJECT'
+        option output 'ACCEPT'
+        option forward 'REJECT'
+        option masq '1'
+        option mtu_fix '1'
+        list network 'wan'
+
+config forwarding
+        option src 'home'
+        option dest 'wan'
+
+config zone
+        option name 'guest'
+        list network 'guest'
+        option input 'REJECT'
+        option output 'ACCEPT'
+        option forward 'REJECT'
+
+config forwarding
+        option src 'guest'
+        option dest 'wan'
+
+config zone
+        option name 'hub'
+        list network 'hub'
+        option input 'REJECT'
+        option output 'ACCEPT'
+        option forward 'REJECT'
+
+config forwarding
+        option src 'hub'
+        option dest 'wan'
+
+config forwarding
+        option src 'home'
+        option dest 'hub'
+
+config forwarding
+        option src 'hub'
+        option dest 'home'
+
+config zone
+        option name 'tailscale'
+        option input 'ACCEPT'
+        option output 'ACCEPT'
+        option forward 'ACCEPT'
+        option masq '1'
+        list device 'tailscale0'
+
+config forwarding
+        option src 'home'
+        option dest 'tailscale'
+
+config forwarding
+        option src 'hub'
+        option dest 'tailscale'
+
+config forwarding
+        option src 'tailscale'
+        option dest 'home'
+
+config forwarding
+        option src 'tailscale'
+        option dest 'wan'
+EOF
+
+# SYSTEM
+cat > "$SYST_CONF" << EOF
+config system
+        option hostname '$HOST_NAME'
+        option timezone '$TZ'
+        option zonename '$TZN'
+EOF
+
+# SYSCTL
+cat > "$SYSCTL_CONF" << 'EOF'
+net.ipv4.ip_forward=1
+net.ipv6.conf.all.forwarding=1
+EOF
+
+# TAILSCALE HOSTS SCRIPT
+cat > "$TS_HOSTS" << 'EOF'
+#!/bin/sh
+OUT=/etc/tshosts
+mkdir -p "$(dirname "$OUT")"
+: > "$OUT"
+tailscale status --json | jq -r '.Peer[]?, .Self | "\(.DNSName) \(.TailscaleIPs[]?)"' |
+while read dns ip; do
+    case "$ip" in *:*) continue ;; esac
+    dns=${dns%.}
+    short=${dns%%.*}
+    echo "$ip $short $dns" >> "$OUT"
+done
+EOF
+
+# UPTIME CHECK
+cat > "$UP_CHECK" << 'EOF'
+#!/bin/sh
+NOW=$(date "+%F %H:%M")
+UPTIME_SEC=$(cut -d. -f1 /proc/uptime)
+echo "$NOW | Uptime: $((UPTIME_SEC/60))m" >> /root/uptime.log
+EOF
+
+chmod +x "$TS_HOSTS" "$UP_CHECK"
+
+# CRON
+cat > "$CRON" << EOF
+0 0 * * * $TS_HOSTS
+0 * * * * $UP_CHECK
+EOF
+
+/etc/init.d/network restart
+/etc/init.d/firewall restart
+/etc/init.d/dnsmasq restart
+wifi reload
+
+opkg update
+opkg install tailscale jq
+
+tailscale up --ssh --force-reauth \
+  --auth-key="$AUTH_KEY" \
+  --advertise-exit-node \
+  --advertise-routes=192.168.1.0/24,192.168.20.0/24 \
+  --hostname="$HOST_NAME"
+
+sh "$TS_HOSTS"
+
+echo "Setup Completed"
