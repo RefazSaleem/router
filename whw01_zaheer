@@ -14,7 +14,7 @@ UP_CHECK="/usr/sbin/upcheck"
 CRON="/etc/crontabs/root"
 
 #Editable Variables
-HOST_NAME="whwl"
+HOST_NAME="whl"
 TZ="IST-5:30"
 TZN="Asia/Kolkata"
 HOME_SSID="Home"
