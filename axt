@@ -512,15 +512,12 @@ cat > "/root/initiate" << 'EOF'
 #!/bin/sh
 opkg update
 opkg install tailscale jq
-tailscale up --ssh --force-reauth --auth-key="$AUTH_KEY" --advertise-exit-node --advertise-routes=192.168.11.0/24,192.168.21.0/24,192.168.31.0/24 --hostname="$HOST_NAME"
+tailscale up --ssh --force-reauth --auth-key="$AUTH_KEY" --advertise-exit-node --advertise-routes=192.168.11.0/24,192.168.21.0/24,192.168.31.0/24 --hostname=axt
 EOF
 
 chmod +x "/root/initiate"
 
-# CRON
 cat > "/etc/crontabs/root" << EOF
 @reboot /root/initiate
 EOF
-
-
-echo "Setup Completed"
+reboot
