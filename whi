@@ -1,3 +1,6 @@
+#!/bin/sh
+
+
 # Update package index
 apk update
 
